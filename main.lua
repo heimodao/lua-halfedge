@@ -112,7 +112,13 @@ function make_half_edge(vertex_count,radius)
 	return hf
 end
 
-function vertex_split(new_v,e_start,e_end,model ) --vertex split: add a new vertex and move some edges with it
+--vertex split: add a new vertex and move some edges with it
+--[[ 
+	if e_end is nil then adds a vertex that is previous to e_start
+ 		i.e. prev(e_start)->ret->ret.pair->e_start
+ 	if e_end is not nil then it moves edges 
+--]]
+function vertex_split(new_v,e_start,e_end,model ) 
 	--[=[if e_end==nil then
 		e_end=next_vertex_edge(e_start)
 		--[[while e_end.pair.face~=e_start.face do
@@ -127,29 +133,30 @@ function vertex_split(new_v,e_start,e_end,model ) --vertex split: add a new vert
 	if e_end~=nil then
 		local cur_edge=e_start
 		while cur_edge~=e_end do
+			table.insert(affected,cur_edge)
 			cur_edge=next_vertex_edge(cur_edge)
-			if cur_edge~=e_end then
-				table.insert(affected,cur_edge)
-			end
 		end
 		f2=e_end.pair.face
 	end
+	--print("affected:",#affected)
 	--gen two half edges
 	local v=e_start.vert
 	
-	local e1,e2=make_edge(v,new_v,e_start.face,f2 or e_start.face)
+	local e1,e2=make_edge(v,new_v,f2 or e_start.face,e_start.face)
 	if #affected>0 then
 		--set vertex
 		for i,v in ipairs(affected) do
 			v.vert=new_v
 		end
 		--link them in:
-		assert(affected[1]==e_start.next)
-		assert(affected[#affected].next==e_end.pair)
 
+		assert(affected[#affected].pair.next==e_start)
+		assert(affected[1]==e_end.pair.next)
+
+		affected[#affected].pair.next=e2
 		e_end.pair.next=e1
-		e1.next=affected[1] --prob e2 if empty
-		affected[#affected].next=e2 --prob nothing if empty
+
+		e1.next=affected[1]
 		e2.next=e_start
 	else
 		--no edges are "dragged" with the new point
@@ -234,7 +241,7 @@ function extrude( face,vec ,model)
 		local e2=new_edges[i+1]
 		face_split(e1,e2,model)
 	end
-	local first=new_edges[1]
+	--local first=new_edges[1]
 	--print("First:",first.face,prev_vertex_edge(first).face,first.pair.face)
 	--[[do
 		local cur=first
@@ -244,7 +251,7 @@ function extrude( face,vec ,model)
 		end
 	end]]
 
-	local last=new_edges[#new_edges]
+	--local last=new_edges[#new_edges]
 	--print("Last:",last.pair.face)
 	--[[
 	local last_edge
@@ -263,7 +270,7 @@ function extrude( face,vec ,model)
 		end
 	end]]
 
-	face_split(e.next.next,prev_edge(e),model)
+	return face_split(e.next.next,prev_edge(e),model),new_edges
 end
 function triangulate_quads( model ,fail_on_poly)
 	local quads={}
@@ -281,7 +288,7 @@ function triangulate_quads( model ,fail_on_poly)
 		if #edges==4 then
 			table.insert(quads,v)
 		end
-		print(("Face %d edges %d"):format(i,#edges))
+		--print(("Face %d edges %d"):format(i,#edges))
 	end
 	print("Triangulating "..#quads.." quads")
 	for i,v in ipairs(quads) do
@@ -383,16 +390,37 @@ function spike( face,vec_offset,model )
 	center[3]=center[3]/#e+vec_offset[3]
 
 	local e_n=vertex_split(center,e[1],nil,model)
-
+	local ret={face}
 	for i=1,#e-1 do
 		local f,nn=face_split(e_n.pair,e_n.pair.next.next,model)
+		table.insert(ret,f)
 		e_n=nn
 	end
+	return ret
 end
 --tri test:
 do
 	local hf=make_half_edge(3,1)
 	save_mesh(to_triangles(hf),"tri.ply")
+end
+do
+	local hf=make_half_edge(3,1)
+	local top,edges=extrude(hf.faces[1],0.2,hf)
+	--vertex_split({0,0,0},hf.edges[1],nil,hf)
+	local e=edges[1]
+	local v1=e.vert
+	local v2=e.pair.vert
+	local center={(v1[1]+v2[1])/3,(v1[2]+v2[2])/3,(v1[3]+v2[3])/2+0.5}
+	
+	vertex_split(center,e,next_vertex_edge(e),hf)
+	--[[for i=1,3 do
+		local v=center[i]
+		center[i]=e.vert[i]
+		e.vert[i]=v
+	end]]
+	--triangulate_quads(hf,false)
+	triangulate_simple( hf)
+	save_mesh(to_triangles(hf),"tri2.ply")
 end
 --tetrahedron test:
 do
@@ -476,6 +504,67 @@ do
 	extrude(hf.faces[1],{0,0,1},hf)
 	triangulate_quads( hf,false)
 	triangulate_simple( hf)
-	save_mesh(to_triangles(hf),"cylinder.ply")
-	
+	save_mesh(to_triangles(hf),"cylinder.ply")	
 end
+--finally random crystal:
+function random_vector( len )
+	len=len or 1
+	local x1=math.random()
+	local x2=math.random()
+	local d=x1*x1+x2*x2
+	while d>=1 do
+		x1=math.random()
+		x2=math.random()
+		d=x1*x1+x2*x2
+	end
+	local id=math.sqrt(1-d)
+	return {2*x1*id*len,2*x2*id*len,(1-2*d)*len}
+end
+function random_vector_positive( len )
+	local ret=random_vector(len)
+	if ret[3]<0 then
+		ret[1]=-ret[1]
+		ret[2]=-ret[2]
+		ret[3]=-ret[3]
+	end
+	return ret
+end
+do
+	local rad=math.random()*2+0.5
+	local min_h=0.5
+	local hf=make_half_edge(math.random(3,7),rad)
+	local faces=spike(hf.faces[1],math.random()*(rad-min_h)+min_h,hf)
+	for i=1,10 do
+		local ends={}
+		for i,v in ipairs(faces) do
+			local f=extrude(v,math.random()*3+0.75,hf)
+			table.insert(ends,f)
+		end
+		local face_list={}
+		for i,v in ipairs(ends) do
+			local faces=spike(v,math.random()*2+1,hf)
+			for i,v in ipairs(faces) do
+				if math.random()>0.8 then
+					table.insert(face_list,v)
+				end
+			end
+		end
+		faces=face_list
+	end
+	
+	
+	triangulate_quads( hf,false)
+	triangulate_simple( hf)
+	save_mesh(to_triangles(hf),"crystal_bunch.ply")
+end
+--[[for i=1,15 do
+do
+	local hf=make_half_edge(math.random(3,5),math.random()*3+0.3)
+	local dir=random_vector_positive(math.random()*10+3)
+	extrude(hf.faces[1],dir,hf)
+	spike(hf.faces[#hf.faces],math.random()*2+1,hf)
+	triangulate_quads( hf,false)
+	triangulate_simple( hf)
+	save_mesh(to_triangles(hf),"crystal"..i..".ply")	
+end
+end]]

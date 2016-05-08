@@ -1,0 +1,442 @@
+local class=require 'class'
+local point=require 'point'
+--[[
+	a half edge
+		has point that it points out of
+		and a face that it belongs to
+--]]
+local edge=class(function ( o,p,f )
+	o.point=p
+	o.face=f
+end)
+function edge:prev_edge()
+	local cur=self
+	while cur.next do
+		if cur.next==self then
+			return cur
+		else
+			cur=cur.next
+		end
+	end
+end
+function edge:prev_point_edge() --not performant
+	return self:prev_edge().pair
+end
+function edge:next_point_edge()
+	return self.pair.next
+end
+function edge:end_point()
+	return self.pair.point
+end
+function edge:point_edges()
+	local e_next=function ( f ,edge)
+		if edge==nil then
+			return self
+		else
+			if edge:next_point_edge()==self then
+				return nil
+			else
+				return edge:next_point_edge()
+			end
+		end
+	end
+	return f_next,self
+end
+function edge:direction()
+	local p=self.pair.point-self.point
+	p:normalize()
+	return p
+end
+function edge:check_invariants(name)
+	assert(self==self.next:prev_edge(),name) --prev(next(e))
+	assert(self==self:prev_edge().next,name) --next(prev(e))
+	assert(self==self.pair.pair,name)
+	assert(self.face==self.next.face,name)
+end
+
+local face=class(function ( o )
+
+end)
+
+function face:normal_simple()
+	local e1=self.edge.point
+	local e2=self.edge.next.point
+	local e3=self.edge.next:end_point()
+	local u=e1-e2
+	local v=e3-e2
+
+	local cross=u^v
+	cross:normalize()
+	return (-1)*cross
+end
+function face:check_invariants(name)
+	assert(self.edge.face==self,name)
+end
+function face:edges()
+	local f_next=function ( f ,edge)
+		if edge==nil then
+			return f.edge
+		else
+			if edge.next==f.edge then
+				return nil
+			else
+				return edge.next
+			end
+		end
+	end
+	return f_next,self
+end
+function make_edge( p1,p2 ,f1,f2) --makes a full edge (2 half edges)
+	local e1=edge(p1,f1)
+	local e2=edge(p2,f2)
+	e1.pair=e2
+	e2.pair=e1
+	return e1,e2
+end
+
+local model=class(function (o)
+	o:clear()
+end)
+function model:clear()
+	self.points={}
+	self.edges={}
+	self.faces={}
+end
+function model:gen_disk(point_count,radius)
+	radius=radius or 1
+
+	local points={}
+	local edges_f={}
+	local edges_r={}
+	local angle_step=2*math.pi/point_count
+	--place points
+	for i=1,point_count do
+		points[i]=point(math.cos(angle_step*i)*radius,math.sin(angle_step*i)*radius,0)
+	end
+	--make faces
+	local f1=face()
+	local f2=face()
+	for i=1,point_count do
+		local this=points[i]
+		local next_id=math.fmod(i,point_count)+1
+		local next=points[next_id]
+
+		local e1,e2=make_edge(this,next,f1,f2)
+		edges_f[i]=e1
+		edges_r[point_count-i+1]=e2
+	end
+
+	f1.edge=edges_f[1]
+	f2.edge=edges_r[1]
+	for i=1,point_count do
+		local next=math.fmod(i,point_count)+1
+		local e1=edges_f[i]
+		e1.next=edges_f[next]
+		local e2=edges_r[i]
+		e2.next=edges_r[next]
+	end
+
+	table.insert(self.faces,f1)
+	table.insert(self.faces,f2)
+	for i,v in ipairs(points) do
+		table.insert(self.points,v)
+	end
+	for i,v in ipairs(edges_f) do
+		table.insert(self.edges,v)
+	end
+	for i,v in ipairs(edges_r) do
+		table.insert(self.edges,v)
+	end
+end
+function model.check_invariants( model )
+	for i,v in ipairs(model.edges) do
+		v:check_invariants("Edge"..i)
+	end
+	for i,v in ipairs(model.faces) do
+		v:check_invariants("Face"..i)
+	end
+end
+--[===[ Elementary operations ]===]
+--[[
+	vertex split: add a new vertex and move some edges with it
+	if edge_end is nil then adds a vertex that is previous to edge_start
+ 		i.e. prev(edge_start)->ret->ret.pair->edge_start
+ 	if edge_end is not nil then it moves edges
+ 	--moves [edge_start,edge_end)
+--]]
+function model.vertex_split(model,new_point,edge_start,edge_end)
+
+	--find affected edges
+	local affected={}
+	local f2
+	if edge_end~=nil then
+
+		local cur_edge=edge_start
+		while cur_edge~=edge_end do
+			table.insert(affected,cur_edge)
+			cur_edge=cur_edge:next_point_edge()
+		end
+		f2=edge_end.pair.face
+	end
+
+	--gen two half edges
+	local v=edge_start.point
+
+	local e1,e2
+	if #affected>0 then --probably broken!
+		--print("affected:",#affected)
+		--set vertex
+		for i,v in ipairs(affected) do
+			v.point=new_point
+		end
+		--link them in:
+
+		--assert(affected[#affected].pair.next==edge_start:prev_point_edge())
+		--assert(affected[1]==edge_end.pair.next)
+		local was_next=affected[#affected].pair.next
+		local prev=edge_start:prev_edge()
+
+		e1,e2=make_edge(new_point,v,was_next.face,prev.face)
+
+		affected[#affected].pair.next=e1
+		prev.next=e2
+
+		e1.next=was_next
+		e2.next=edge_start
+	else
+		assert(edge_end==nil)
+		--no edges are "dragged" with the new point
+		e1,e2=make_edge(v,new_point,edge_start.face,edge_start.face)
+		local prev=edge_start:prev_edge()
+
+		prev.next=e1
+		e1.next=e2
+		e2.next=edge_start
+	end
+	table.insert(model.points,new_point)
+	table.insert(model.edges,e1)
+	table.insert(model.edges,e2)
+	return e1
+end
+--edge collapse (opossite to vertex split)
+function model:face_split(hf1,hf2)
+	-- add new he from hf1 to hf2
+	assert(hf1~=hf2 , "Cannot split face that is from same edge to same edge")
+	assert(hf1.face==hf2.face, "Cannot split face if edges are from two different faces")
+	local v1=hf1.point
+	local v2=hf2.point
+	assert(v1~=v2)
+	assert(hf1.next~=hf2,"Face with only two edges is not allowed")-- this is a simple edge (face would have 0 edges?)
+	local old_prev=hf1:prev_edge()
+	local new_face=face()
+	local e1,e2=make_edge(v2,v1,new_face,hf1.face)
+	local cur_edge=hf1
+	while cur_edge.next~=hf2 do
+		cur_edge.face=new_face
+		cur_edge=cur_edge.next
+	end
+	cur_edge.face=new_face
+	e1.next=hf1
+	e2.next=hf2
+	cur_edge.next=e1
+	old_prev.next=e2
+
+	new_face.edge=e1
+	hf2.face.edge=hf2
+	table.insert(self.edges,e1)
+	table.insert(self.edges,e2)
+	table.insert(self.faces,new_face)
+	return new_face,e1
+end
+--[===[ More complex operations ]===]
+--from half-edge to ply compatable triangles (0 based tri index). Warning: points are not copied
+function model:make_tri_mesh(tri_index_offset)
+	tri_index_offset=tri_index_offset or -1
+
+	local mesh={}
+	mesh.points=self.points
+
+	local pt_mapping={} --point mapping for quick index lookup
+	for i,v in ipairs(self.points) do
+		pt_mapping[v]=i
+	end
+
+	mesh.triangles={}
+	for i,v in ipairs(self.faces) do
+		local tri={}
+		local e=v.edge
+
+		repeat
+			table.insert(tri,pt_mapping[e.point]+tri_index_offset)
+			e=e.next
+		until e==v.edge
+
+		if #tri>3 then
+			error(("Face %d has too many edges: %d"):format(i,#tri))
+		end
+
+		table.insert(mesh.triangles,tri)
+	end
+
+	return mesh
+end
+function model:spike( face ,vec_offset )
+	vec_offset=vec_offset or 0
+	if type(vec_offset)=="number" then
+		local n=face:normal_simple()
+		local d=vec_offset
+		vec_offset=d*n
+	end
+	local center=point(0,0,0)
+
+	local edges={}
+	for v in face:edges() do
+		center=center+v.point
+		table.insert(edges,v)
+	end
+	center=center/#edges+vec_offset
+
+	local e_n=self:vertex_split(center,face.edge)
+	local ret={face}
+	for i=1,#edges-1 do
+		local v=edges[i]
+
+		local f,nn=self:face_split(e_n.pair,e_n.pair.next.next)
+		table.insert(ret,f)
+		e_n=nn
+
+	end
+	return ret
+end
+
+
+function model:extrude( face,vec)
+	vec=vec or 0
+	if type(vec)=="number" then
+		local n=face:normal_simple()
+		local d=vec
+		vec=d*n
+	end
+	--print_edges_for_face(face)
+	local e=face.edge
+	local edges={}
+	while e.next~=face.edge do
+		table.insert(edges,e)
+		e=e.next
+	end
+	table.insert(edges,e)
+	--print("Extruding:",#edges)
+	local new_edges={}
+	for i,v in ipairs(edges) do
+		local nv=v.point+vec
+		local ne=self:vertex_split(nv,v)
+		table.insert(new_edges,ne.pair)
+	end
+	--print_edges_for_face(face)
+	for i=1,#new_edges-1 do
+		local e1=new_edges[i]
+		local e2=new_edges[i+1]
+		self:face_split(e1,e2)
+	end
+
+	return self:face_split(e.next.next,e:prev_edge()),new_edges
+end
+
+function model.bevel_face( m,face,height,width,edges)
+	height=height or 0
+	width=width or height
+
+	for e in face:edges() do
+		e.point:translate(0,0,-height)
+	end
+	local top=m:extrude(face,height)
+	local center=point(0,0,0)
+	local count=0
+	for e in top:edges() do
+		center=center+e.point
+		count=count+1
+	end
+	center=center/count
+	local offset=function(e)
+		local dir=center-e.point
+		dir:normalize()
+		e.point:set(e.point+width*dir)
+	end
+	if edges==nil then
+		for e in top:edges() do
+			offset(e)
+		end
+	else
+		local count=1
+		for e in top:edges() do
+			if edges[count] then
+				offset(e)
+			end
+			count=count+1
+		end
+	end
+	return top
+end
+
+function model.bevel_edge( m,edge,offset)
+
+	local prev=edge:prev_point_edge():direction()
+	local next=edge:next_point_edge():direction()
+
+	local was_next=edge.next
+	local p1=edge.point+offset*prev
+	edge.point:set(edge.point+offset*next)
+	local e_split1=m:vertex_split(p1,edge:prev_point_edge(),edge:next_point_edge())
+
+	local p2=was_next.point+offset*prev
+	was_next.point:set(was_next.point+offset*next)
+	local e_split2=m:vertex_split(p2,was_next:prev_point_edge(),was_next:next_point_edge())
+
+	return m:face_split(e_split1.next,e_split2.pair)
+end
+
+function model.triangulate_quads( model ,fail_on_poly)
+	local quads={}
+	for i,v in ipairs(model.faces) do
+		local edges={}
+		for e in v:edges() do
+			table.insert(edges,e)
+		end
+		if #edges> 4 and fail_on_poly then
+			error(("Face %d has more than 4 edges (%d)"):format(i,#edges))
+		end
+		if #edges==4 then
+			table.insert(quads,v)
+		end
+	end
+
+	for i,v in ipairs(quads) do
+		local e=v.edge
+		local edges={}
+		while e.next~=v.edge do
+			table.insert(edges,e)
+			e=e.next
+		end
+		model:face_split(edges[1],edges[3])
+	end
+end
+
+function model.triangulate_simple( model )
+	local polygons={}
+	for i,v in ipairs(model.faces) do
+		local edges={}
+		for e in v:edges() do
+			table.insert(edges,e)
+		end
+
+		if #edges>=4 then
+			table.insert(polygons,v)
+		end
+
+	end
+
+	for i,v in ipairs(polygons) do
+		model:spike(v)
+	end
+end
+return model

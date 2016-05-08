@@ -19,3 +19,48 @@ end_header
 		f:write(string.format("3 %d %d %d\n",v[1],v[2],v[3]))
 	end
 end
+function save_half_edge(mesh,filename,faces)
+	local f=io.open(filename,"w")
+	local s=[[ply
+format ascii 1.0
+comment made by lua ply module
+element vertex %d
+property float x
+property float y
+property float z
+element face %d
+property list uchar int vertex_index
+end_header
+]]
+	local face_count=#mesh.faces
+	if faces then face_count=#faces end
+	f:write(string.format(s,#mesh.points,face_count))
+	local pt_mapping={} --point mapping for quick index lookup
+	for i,v in ipairs(mesh.points) do
+		f:write(string.format("%f %f %f\n",v[1],v[2],v[3]))
+		pt_mapping[v]=i
+	end
+
+	local save_face=function ( v )
+		local s="%d"
+			local count=0
+			for e in v:edges() do
+				s=s.." "..pt_mapping[e.point]-1
+				count=count+1
+			end
+			s=s.."\n"
+			f:write(string.format(s,count))
+	end
+
+	if faces==nil then
+		for i,v in ipairs(mesh.faces) do
+			save_face(v)
+		end
+	else
+		for i,v in ipairs(faces) do
+			save_face(v)
+		end
+	end
+end
+
+return {save=save_mesh,save_half_edge=save_half_edge}
