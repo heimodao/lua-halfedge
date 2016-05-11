@@ -218,7 +218,42 @@ function model.vertex_split(model,new_point,edge_start,edge_end)
 	model.edges[e2]=true
 	return e1
 end
---edge collapse (opossite to vertex split)
+function model:edge_collapse( edge )
+	--removes half edge and it's pair and edge.point
+	local old_pt=edge.point
+	local prev=edge:prev_edge()
+	local pair_prev=edge.pair:prev_edge()
+	local new_pt=edge.pair.point
+
+	for e in edge:point_edges() do
+		e.point=new_pt
+	end
+
+	if edge.next~=edge.pair then
+		prev.next=edge.next
+		pair_prev.next=edge.pair.next
+	else
+		prev.next=edge.next.next
+	end
+	self.edges[edge]=nil
+	self.edges[edge.pair]=nil
+	self.points[old_pt]=nil
+end
+function model:face_collapse( edge )
+	assert(edge.face~=edge.pair.face, "Edge must be between two different faces")
+	local removed_face=edge.face
+	local new_face=edge.pair.face
+	for e in removed_face:edges() do
+		e.face=new_face
+	end
+
+	edge:prev_edge().next=edge.pair.next
+	edge.pair:prev_edge().next=edge.next
+
+	self.edges[edge]=nil
+	self.edges[edge.pair]=nil
+	self.faces[removed_face]=nil
+end
 function model:face_split(hf1,hf2)
 	-- add new he from hf1 to hf2
 	assert(hf1~=hf2 , "Cannot split face that is from same edge to same edge")
@@ -275,7 +310,7 @@ function model:make_tri_mesh(tri_index_offset)
 		until e==v.edge
 
 		if #tri>3 then
-			error(("Face %d has too many edges: %d"):format(i,#tri))
+			error(("Face %d has too many edges: %d"):format(count,#tri))
 		end
 
 		table.insert(mesh.triangles,tri)

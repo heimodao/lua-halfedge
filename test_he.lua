@@ -8,7 +8,6 @@ do
 	m:check_invariants()
 	ply.save(m:make_tri_mesh(),"tri.ply")
 end
-
 do
 	local m=model()
 	m:gen_disk(3)
