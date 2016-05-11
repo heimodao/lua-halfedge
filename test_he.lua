@@ -5,9 +5,6 @@ local point=require 'point'
 do
 	local m=model()
 	m:gen_disk(3)
-	for e in m.faces[1]:edges() do
-		print(e,e.point)
-	end
 	m:check_invariants()
 	ply.save(m:make_tri_mesh(),"tri.ply")
 end
@@ -15,7 +12,7 @@ end
 do
 	local m=model()
 	m:gen_disk(3)
-	m:spike(m.faces[1],1)
+	m:spike(next(m.faces),1)
 	m:check_invariants()
 	ply.save_half_edge(m,"tetra.ply")
 end
@@ -51,7 +48,7 @@ end
 do
 	local m=model()
 	m:gen_disk(3)
-	local f=m:extrude(m.faces[1],1)
+	local f=m:extrude(next(m.faces),1)
 	--[[local top=f
 	local h=0
 	local w=0.3
@@ -94,7 +91,7 @@ end
 do
 	local m=model()
 	m:gen_disk(6,0.2)
-	local f=m:extrude(m.faces[1],3)
+	local f=m:extrude(next(m.faces),3)
 	spin_face(m,f,math.pi/8,point(1,0,0))
 	f=m:extrude(f,1)
 	m:triangulate_simple()
@@ -110,7 +107,9 @@ end
 do
 	local m=model()
 	m:gen_disk(4,math.sqrt(2)/2)
-	local top=m:extrude(m.faces[1],1)
+	local first_face=next(m.faces)
+	local second_face=next(m.faces,first_face)
+	local top=m:extrude(first_face,1)
 	--[[local p=top.edge.point+point(0,0,0.2)
 	for e in top:edges() do
 		print("Edge:",e)
@@ -123,8 +122,8 @@ do
 	local e_split=m:vertex_split(p,top.edge,top.edge:next_point_edge())]]
 	m:bevel_edge(top.edge,0.05)
 	m:bevel_edge(top.edge.next.next,0.05)
-	m:bevel_edge(m.faces[2].edge,0.05)
-	m:bevel_edge(m.faces[2].edge.next.next,0.05)
+	m:bevel_edge(second_face.edge,0.05)
+	m:bevel_edge(second_face.edge.next.next,0.05)
 	local f1=top.edge.next.pair.face
 	local f2=top.edge.next.next.next.pair.face
 	f1=m:bevel_face(f1,0.02)

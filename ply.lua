@@ -32,13 +32,21 @@ element face %d
 property list uchar int vertex_index
 end_header
 ]]
-	local face_count=#mesh.faces
+	local pt_counter = 0
+	for v,_ in pairs(mesh.points) do pt_counter=pt_counter+1 end
+	local face_counter=0
+	for v,_ in pairs(mesh.faces) do face_counter=face_counter+1 end
+	local face_count=face_counter
 	if faces then face_count=#faces end
-	f:write(string.format(s,#mesh.points,face_count))
+
+	f:write(string.format(s,pt_counter,face_count))
+
 	local pt_mapping={} --point mapping for quick index lookup
-	for i,v in ipairs(mesh.points) do
+	local count=1
+	for v,_ in pairs(mesh.points) do
 		f:write(string.format("%f %f %f\n",v[1],v[2],v[3]))
-		pt_mapping[v]=i
+		pt_mapping[v]=count
+		count=count+1
 	end
 
 	local save_face=function ( v )
@@ -53,11 +61,11 @@ end_header
 	end
 
 	if faces==nil then
-		for i,v in ipairs(mesh.faces) do
+		for v,_ in pairs(mesh.faces) do
 			save_face(v)
 		end
 	else
-		for i,v in ipairs(faces) do
+		for v,_ in pairs(faces) do
 			save_face(v)
 		end
 	end

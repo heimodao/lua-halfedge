@@ -135,25 +135,25 @@ function model:gen_disk(point_count,radius)
 		local e2=edges_r[i]
 		e2.next=edges_r[next]
 	end
+	self.faces[f1]=true
+	self.faces[f2]=true
 
-	table.insert(self.faces,f1)
-	table.insert(self.faces,f2)
 	for i,v in ipairs(points) do
-		table.insert(self.points,v)
+		self.points[v]=true
 	end
 	for i,v in ipairs(edges_f) do
-		table.insert(self.edges,v)
+		self.edges[v]=true
 	end
 	for i,v in ipairs(edges_r) do
-		table.insert(self.edges,v)
+		self.edges[v]=true
 	end
 end
 function model.check_invariants( model )
-	for i,v in ipairs(model.edges) do
-		v:check_invariants("Edge"..i)
+	for v in pairs(model.edges) do
+		v:check_invariants("Edge"..tostring(v))
 	end
-	for i,v in ipairs(model.faces) do
-		v:check_invariants("Face"..i)
+	for v in pairs(model.faces) do
+		v:check_invariants("Face"..tostring(v))
 	end
 end
 --[===[ Elementary operations ]===]
@@ -213,9 +213,9 @@ function model.vertex_split(model,new_point,edge_start,edge_end)
 		e1.next=e2
 		e2.next=edge_start
 	end
-	table.insert(model.points,new_point)
-	table.insert(model.edges,e1)
-	table.insert(model.edges,e2)
+	model.points[new_point]=true
+	model.edges[e1]=true
+	model.edges[e2]=true
 	return e1
 end
 --edge collapse (opossite to vertex split)
@@ -243,9 +243,9 @@ function model:face_split(hf1,hf2)
 
 	new_face.edge=e1
 	hf2.face.edge=hf2
-	table.insert(self.edges,e1)
-	table.insert(self.edges,e2)
-	table.insert(self.faces,new_face)
+	self.edges[e1]=true
+	self.edges[e2]=true
+	self.faces[new_face]=true
 	return new_face,e1
 end
 --[===[ More complex operations ]===]
@@ -254,15 +254,18 @@ function model:make_tri_mesh(tri_index_offset)
 	tri_index_offset=tri_index_offset or -1
 
 	local mesh={}
-	mesh.points=self.points
-
+	mesh.points={}
 	local pt_mapping={} --point mapping for quick index lookup
-	for i,v in ipairs(self.points) do
-		pt_mapping[v]=i
+	local count=1
+	for v,_ in pairs(self.points) do
+		pt_mapping[v]=count
+		mesh.points[count]=v
+		count=count+1
 	end
 
 	mesh.triangles={}
-	for i,v in ipairs(self.faces) do
+	count=1
+	for v,_ in pairs(self.faces) do
 		local tri={}
 		local e=v.edge
 
@@ -276,6 +279,7 @@ function model:make_tri_mesh(tri_index_offset)
 		end
 
 		table.insert(mesh.triangles,tri)
+		count=count+1
 	end
 
 	return mesh
@@ -397,7 +401,7 @@ end
 
 function model.triangulate_quads( model ,fail_on_poly)
 	local quads={}
-	for i,v in ipairs(model.faces) do
+	for v in pairs(model.faces) do
 		local edges={}
 		for e in v:edges() do
 			table.insert(edges,e)
@@ -423,7 +427,7 @@ end
 
 function model.triangulate_simple( model )
 	local polygons={}
-	for i,v in ipairs(model.faces) do
+	for v in pairs(model.faces) do
 		local edges={}
 		for e in v:edges() do
 			table.insert(edges,e)
