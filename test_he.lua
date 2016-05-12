@@ -15,7 +15,36 @@ do
 	m:check_invariants()
 	ply.save_half_edge(m,"tetra.ply")
 end
-
+function rounded_spike( m,face,height,steps )
+	--TODO: think of a way to calculate w and h per step
+	for i=1,steps-1 do
+		face=m:bevel_face(face,w,h)
+	end
+	m:spike(face,h)
+end
+do
+	local m=model()
+	m:gen_disk(10)
+	local top=next(m.faces)
+	top=m:extrude(top,1)
+	top=m:bevel_face(top,0.4,0.1)
+	top=m:bevel_face(top,0.3,0.2)
+	top=m:bevel_face(top,0.2,0.3)
+	--top=m:bevel_face(top,0.1,0.4)
+	for e in top:edges() do
+		e.point:translate(0,0,-0.1)
+	end
+	m:spike(top,0.05)
+	--top=m:bevel_face(top,0.2)
+	--top=m:bevel_face(top,0.1)
+	--top=m:bevel_face(top,0.05)
+	--top=m:bevel_face(top,0.1)
+	--[[for i=1,2 do
+		top=m:bevel_face(top,1)
+	end]]
+	--m:triangulate_simple()
+	ply.save_half_edge(m,"rounded.ply")
+end
 function bend(m, face,d ,edge_num)
 	local top=m:extrude(face,0)
 	local normal=top:normal_simple()

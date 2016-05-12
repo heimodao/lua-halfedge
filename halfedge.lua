@@ -283,6 +283,18 @@ function model:face_split(hf1,hf2)
 	self.faces[new_face]=true
 	return new_face,e1
 end
+--deletes face1, and merges into face2
+function model:face_merge( face1,face2 )
+	assert(false,"NOT IMPLEMENTED")
+	local mod_edges={}
+
+	for e in face1:edges() do
+		table.insert(mod_edges,e)
+	end
+	--create edge from face1 to face2
+	--insert face2 loop e1 ->face1 -> e2-> face2
+	--delete face1
+end
 --[===[ More complex operations ]===]
 --from half-edge to ply compatable triangles (0 based tri index). Warning: points are not copied
 function model:make_tri_mesh(tri_index_offset)
