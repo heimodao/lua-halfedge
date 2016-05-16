@@ -18,6 +18,63 @@ end_header
 	for i,v in ipairs(mesh.triangles) do
 		f:write(string.format("3 %d %d %d\n",v[1],v[2],v[3]))
 	end
+	f:close()
+end
+local function split_words( s )
+	local ret={}
+	for word in s:gmatch("%w+") do table.insert(ret,word) end
+	return ret
+end
+function load_mesh( filename )
+	local mesh={}
+
+	local f,err=io.open(filename)
+	if not f then error(err) end
+
+	assert(f:read("*l")=="ply")
+	assert(f:read("*l")=="format ascii 1.0")
+
+	local line=f:read("*l")
+	local elements={}
+	local current_element
+	while line~="end_header" do
+		local w=split_words(line)
+
+		if #w then
+			if w[1]=="element" then
+				current_element={name=w[2],count=tonumber(w[3]),properties={}}
+				table.insert(elements,current_element)
+			elseif w[1]=="property" then
+				table.insert(current_element.properties,{name=w[#w],type=w[2]})
+			elseif w[1]=="comment" then
+				--nothing
+			else
+				error("Invalid entry:"..w[1])
+			end
+		end
+		line=f:read("*l")
+	end
+	for i,v in ipairs(elements) do
+		local tbl={}
+		mesh[v.name]=tbl
+		for i=1,v.count do
+			local element={}
+			for i,v in ipairs(v.properties) do
+				if v.type=="float" then
+					element[i]=f:read("*n")
+				elseif v.type=="list" then
+					local count=f:read("*n")
+					for j=1,count do
+						element[j]=f:read("*n")
+					end
+				else
+					error("invalid element type")
+				end
+			end
+			table.insert(tbl,element)
+		end
+	end
+	return mesh
 end
 function save_half_edge(mesh,filename,faces)
 	local f=io.open(filename,"w")
@@ -69,6 +126,7 @@ end_header
 			save_face(v)
 		end
 	end
+	f:close()
 end
 
-return {save=save_mesh,save_half_edge=save_half_edge}
+return {save=save_mesh,load=load_mesh,save_half_edge=save_half_edge}
