@@ -40,7 +40,7 @@ function edge:point_edges()
 			end
 		end
 	end
-	return f_next,self
+	return e_next,self
 end
 function edge:direction()
 	local p=self.pair.point-self.point
@@ -68,6 +68,11 @@ function face:normal_simple()
 	local cross=u^v
 	cross:normalize()
 	return (-1)*cross
+end
+function face:plane_simple()
+	local n=self:normal_simple()
+	local d=-(self.edge.point..n)
+	return {n,d}
 end
 function face:check_invariants(name)
 	assert(self.edge.face==self,name)

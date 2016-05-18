@@ -74,6 +74,7 @@ function load_mesh( filename )
 			table.insert(tbl,element)
 		end
 	end
+	mesh.points=mesh.vertex
 	return mesh
 end
 function save_half_edge(mesh,filename,faces)
