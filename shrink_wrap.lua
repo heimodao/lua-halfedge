@@ -20,7 +20,14 @@ function find_bbox( pts )
 end
 
 local min,max=find_bbox(points)
-
+function inside_bbox( p )
+	for i=1,3 do
+		if min[i]>p[i] or max[i]<p[i] then
+			return false
+		end
+	end
+	return true
+end
 local mesh=model()
 mesh:gen_disk(4,1)
 local top=next(mesh.faces)
@@ -46,14 +53,48 @@ top=mesh:extrude(top,max[3]-min[3])
 function distance_to_plane( plane,p )
 	return (plane[1]..p)+plane[2]
 end
+function min_dist( p,pts )
+	local d=inf
+	for i,v in ipairs(pts) do
+		local l=(v-p):len()
+		if d>l then
+			d=l
+		end
+	end
+	return d
+end
+function nearest_point( face,pts ,d)
+	d=d or 0
+
+	local face_pts={}
+	for e in face:edges() do
+		table.insert(face_pts,e.point)
+	end
+
+	local plane=face:plane_simple()
+	local min_len=inf
+	local nearest=1
+	for i,v in ipairs(pts) do
+		local pp=point(v[1],v[2],v[3])
+		local d=distance_to_plane(plane,pp)
+		--if d>0 then return inf,1 end
+		local f_d=min_dist(pp,face_pts)
+		if math.abs(d)<min_len and f_d>=d then
+			nearest=i
+			min_len=math.abs(d)
+		end
+	end
+	return point(pts[nearest][1],pts[nearest][2],pts[nearest][3]),min_len
+end
 function face_distance( face,pts ,max_counted)
 	local plane=face:plane_simple()
 	local sum=0
 	local count=0
 	for i,v in ipairs(pts) do
 		local d=distance_to_plane(plane,point(v[1],v[2],v[3]))
+		--if d>0 then return inf,1 end
 		if math.abs(d)<max_counted then
-			--if d>0 then d=d*(-100) end
+			if d>0 then d=d*(1000) end
 			sum=sum+d*d
 			count=count+1
 		end
@@ -75,7 +116,7 @@ end
 function rand_pt()
 	return point((math.random()*2-1),(math.random()*2-1),(math.random()*2-1))
 end
-function simulated_annealing( edge, dist, max_steps,T)
+function simulated_annealing( edge, dist, max_steps)
 
 	local p=edge.point+point(0,0,0) --copy the point
 	local function temperature( t )
@@ -86,10 +127,13 @@ function simulated_annealing( edge, dist, max_steps,T)
 		return s/math.sqrt(c)
 	end
 	local best_w=w(edge)
+	print("Start w:",best_w)
 	for i=1,max_steps do
 		local T=temperature(i/max_steps)
 		local np=p+dist*rand_pt()
-
+		while not inside_bbox(np) do
+			np=p+dist*rand_pt()
+		end
 		edge.point:set(np)
 		local new_w=w(edge)
 		local delta_w=new_w-best_w
@@ -106,15 +150,27 @@ function simulated_annealing( edge, dist, max_steps,T)
 	end
 	edge.point:set(p)
 end
+
 print(vertex_count(top.edge))
-local move_dist=10
+--[[local move_dist=10
 local step_count=100
 local e=top.edge
 for i=1,4 do
 	simulated_annealing(e,move_dist,step_count)
 	e=e.next
+end]]
+for i=1,1 do
+
+	local f={}
+	for v in pairs(mesh.faces) do
+		table.insert(f,v)
+	end
+	for i,v in ipairs(f) do
+		local tc=nearest_point(v,points,0.5)
+		mesh:spike_point(v,tc)
+	end
+
 end
 
-
---mesh:triangulate_simple()
+mesh:triangulate_quads()
 ply.save_half_edge(mesh,"shrink.ply")

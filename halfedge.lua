@@ -365,6 +365,24 @@ function model:spike( face ,vec_offset )
 	return ret
 end
 
+function model:spike_point( face ,c )
+	local edges={}
+	for v in face:edges() do
+		table.insert(edges,v)
+	end
+
+	local e_n=self:vertex_split(c,face.edge)
+	local ret={face}
+	for i=1,#edges-1 do
+		local v=edges[i]
+
+		local f,nn=self:face_split(e_n.pair,e_n.pair.next.next)
+		table.insert(ret,f)
+		e_n=nn
+
+	end
+	return ret
+end
 
 function model:extrude( face,vec)
 	vec=vec or 0
